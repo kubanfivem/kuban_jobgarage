@@ -67,24 +67,39 @@ end)
 RegisterNetEvent('kuban_jobgarage:spawnVehicle')
 AddEventHandler('kuban_jobgarage:spawnVehicle', function(data)
     local model = data.model
+    local playerJob = nil
+    local spawnPoint = nil
+
+    if Config.Framework == "QBCore" then
+        playerJob = QBCore.Functions.GetPlayerData().job.name
+    elseif Config.Framework == "ESX" then
+        playerJob = ESX.GetPlayerData().job.name
+    end
+
+    for _, garage in pairs(Config.Garages) do
+        if playerJob == garage.job then
+            spawnPoint = garage.SpawnPoint
+            break
+        end
+    end
 
     if Config.Framework == "QBCore" then
         QBCore.Functions.SpawnVehicle(model, function(vehicle)
-            setupVehicle(vehicle)
-        end, Config.SpawnPoint.coords, true)
+            setupVehicle(vehicle, spawnPoint)
+        end, spawnPoint.coords, true)
     elseif Config.Framework == "ESX" then
-        ESX.Game.SpawnVehicle(model, Config.SpawnPoint.coords, Config.SpawnPoint.heading, function(vehicle)
-            setupVehicle(vehicle)
+        ESX.Game.SpawnVehicle(model, spawnPoint.coords, spawnPoint.heading, function(vehicle)
+            setupVehicle(vehicle, spawnPoint)
         end)
     end
 end)
 
-function setupVehicle(vehicle)
+function setupVehicle(vehicle, spawnPoint)
     local randomNumber = math.random(1000, 9999)
-    local plate = 'SAPF '..randomNumber
+    local plate = Config.Plate..randomNumber
     SetVehicleNumberPlateText(vehicle, plate)
-    SetEntityCoords(vehicle, Config.SpawnPoint.coords.x, Config.SpawnPoint.coords.y, Config.SpawnPoint.coords.z, 0.0, 0.0, 0.0, false)
-    SetEntityHeading(vehicle, Config.SpawnPoint.heading)
+    SetEntityCoords(vehicle, spawnPoint.coords.x, spawnPoint.coords.y, spawnPoint.coords.z, 0.0, 0.0, 0.0, false)
+    SetEntityHeading(vehicle, spawnPoint.heading)
     SetVehicleDoorsLocked(vehicle, 2)
     if Config.SpawnInVehicle then
         TaskWarpPedIntoVehicle(PlayerPedId(), vehicle, -1)
@@ -101,11 +116,11 @@ function openCustomizationMenu()
     end
 
     local options = {
-        { title = 'Repair', icon = 'fas fa-wrench', event = 'kuban_jobgarage:repairVehicle' },
-        { title = 'Livery', icon = 'fas fa-paint-brush', event = 'kuban_jobgarage:customizeVehicleLivery' },
-        { title = 'Extras', icon = 'fas fa-tools', event = 'kuban_jobgarage:customizeVehicleExtras' },
-        { title = 'Color', icon = 'fas fa-palette', event = 'kuban_jobgarage:customizeVehicleColor' },
-        { title = 'Plate', icon = 'fas fa-id-card', event = 'kuban_jobgarage:customizeVehiclePlate' }
+        { title = 'Repair', icon = Config.RepairIcon, event = 'kuban_jobgarage:repairVehicle' },
+        { title = 'Livery', icon = Config.LiveryIcon, event = 'kuban_jobgarage:customizeVehicleLivery' },
+        { title = 'Extras', icon = Config.ExtraIcon, event = 'kuban_jobgarage:customizeVehicleExtras' },
+        { title = 'Color', icon = Config.ColorIcon, event = 'kuban_jobgarage:customizeVehicleColor' },
+        { title = 'Plate', icon = Config.PlateIcon, event = 'kuban_jobgarage:customizeVehiclePlate' }
     }
 
     lib.registerContext({
@@ -121,14 +136,25 @@ RegisterNetEvent('kuban_jobgarage:repairVehicle')
 AddEventHandler('kuban_jobgarage:repairVehicle', function()
     local playerPed = PlayerPedId()
     local vehicle = GetVehiclePedIsIn(playerPed, false)
+    
     if vehicle ~= 0 then
-        SetVehicleFixed(vehicle)
-        SetVehicleDirtLevel(vehicle, 0)
-        Notify('Vehicle repaired successfully.', 'success')
+        local doorIndex = 4 
+        SetVehicleDoorOpen(vehicle, doorIndex, false, false)
+        QBCore.Functions.Progressbar("repair_vehicle", Config.ProgressBarText, Config.Timetorepair, false, true, {
+            disableMovement = true,
+            disableCarMovement = true,
+            disableMouse = false,
+            disableCombat = true,
+        }, {}, {}, {}, function() -- Done
+            SetVehicleFixed(vehicle)
+            SetVehicleDirtLevel(vehicle, 0)
+            Notify(Config.RepairSuccess, 'success')
+        end)
     else
-        Notify('You are not in a vehicle.', 'error')
+        Notify(Config.NotInVehicle, 'error')
     end
 end)
+
 
 RegisterNetEvent('kuban_jobgarage:customizeVehicleLivery')
 AddEventHandler('kuban_jobgarage:customizeVehicleLivery', function()
@@ -264,15 +290,28 @@ function deleteVehicle()
         Notify('You must be in a vehicle to store it.', 'error')
         return
     end
-
+    local seat = GetSeatPedIsTryingToEnter(playerPed)
+    if seat == -1 then
+        Notify('You must be inside a vehicle to store it.', 'error')
+        return
+    end
+    local door = Config.DoorIndex or 0
+    SetVehicleDoorOpen(vehicle, door, false, false)
+    TaskLeaveVehicle(playerPed, vehicle, 0)
+    while IsPedInAnyVehicle(playerPed, false) do
+        Citizen.Wait(0)
+    end
     if Config.Framework == "QBCore" then
         QBCore.Functions.DeleteVehicle(vehicle)
     elseif Config.Framework == "ESX" then
         ESX.Game.DeleteVehicle(vehicle)
     end
+
     Notify('Vehicle stored successfully.', 'success')
     PlaySoundFrontend(-1, "CONFIRM_BEEP", "HUD_MINI_GAME_SOUNDSET", 1)
 end
+
+
 
 Citizen.CreateThread(function()
     while true do
@@ -302,6 +341,7 @@ Citizen.CreateThread(function()
                             openCategoryMenu()
                         end
                     end
+
                 end
 
                 local customizationDistance = #(playerCoords - garage.CustomizationPoint.coords)
