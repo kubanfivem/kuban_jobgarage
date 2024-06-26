@@ -320,10 +320,16 @@ Citizen.CreateThread(function()
         local playerCoords = GetEntityCoords(playerPed)
         local playerJob = nil
 
-        if Config.Framework == "QBCore" then
-            playerJob = QBCore.Functions.GetPlayerData().job.name
+         if Config.Framework == "QBCore" then
+            local playerData = QBCore.Functions.GetPlayerData()
+            if playerData and playerData.job then
+                playerJob = playerData.job.name
+            end
         elseif Config.Framework == "ESX" then
-            playerJob = ESX.GetPlayerData().job.name
+            local playerData = ESX.GetPlayerData()
+            if playerData and playerData.job then
+                playerJob = playerData.job.name
+            end
         end
 
         for _, garage in pairs(Config.Garages) do
