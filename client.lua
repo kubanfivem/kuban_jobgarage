@@ -78,7 +78,7 @@ AddEventHandler('kuban_jobgarage:spawnVehicle', function(data)
 
     for _, garage in pairs(Config.Garages) do
         if playerJob == garage.job then
-            spawnPoint = garage.SpawnPoint
+            spawnPoint = Config.SpawnPoint
             break
         end
     end
